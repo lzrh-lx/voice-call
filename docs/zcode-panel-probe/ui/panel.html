@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>voice-call 探针</title>
+<style>
+  body { margin:0; padding:14px; font:13px/1.5 system-ui,-apple-system,"PingFang SC",sans-serif; background:#0b0f1a; color:#e5e7eb; }
+  h1 { font-size:14px; margin:0 0 10px; }
+  #boot { padding:6px 8px; margin-bottom:8px; border-radius:8px; background:#1f2937;
+          font-family:ui-monospace,Menlo,monospace; font-size:11px; color:#fbbf24; white-space:pre-wrap; }
+  #rows .row { display:flex; gap:8px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,.07); }
+  .k { width:110px; flex:none; color:#9ca3af; }
+  .v { flex:1; word-break:break-word; font-family:ui-monospace,Menlo,monospace; font-size:11px; }
+  .ok { color:#4ade80; } .bad { color:#f87171; } .warn { color:#fbbf24; }
+  button { margin-top:12px; padding:8px 14px; border-radius:9px; border:1px solid rgba(255,255,255,.15);
+           background:#6366f1; color:#fff; font-size:13px; cursor:pointer; }
+</style>
+</head>
+<body>
+<h1>voice-call 探针（诊断版）</h1>
+<div id="boot">脚本未执行</div>
+<div id="rows"></div>
+<button id="run">开始检测</button>
+<script>
+(function () {
+  var PORT = '__PORT__';
+  var bootEl = document.getElementById('boot');
+  var rowsEl = document.getElementById('rows');
+  var report = { stages: [], env: {} };
+
+  function boot(msg, ok) {
+    bootEl.textContent += (bootEl.textContent === '脚本未执行' ? '' : '\n') + msg;
+    bootEl.style.color = ok === false ? '#f87171' : (ok === true ? '#4ade80' : '#fbbf24');
+  }
+  function row(key, label) {
+    var d = document.createElement('div');
+    d.className = 'row';
+    d.innerHTML = '<div class="k">' + label + '</div><div class="v" id="v-' + key + '">—</div>';
+    rowsEl.appendChild(d);
+    return function (text, cls) {
+      var el = document.getElementById('v-' + key);
+      el.textContent = text;
+      el.className = 'v ' + (cls || '');
+    };
+  }
+  // 无论握手成败，都直接把结果 POST 给本地服务
+  function post(payload) {
+    try {
+      fetch('http://127.0.0.1:' + PORT + '/report', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(function () {});
+    } catch (e) { /* 忽略 */ }
+  }
+
+  window.addEventListener('error', function (e) {
+    boot('脚本错误: ' + (e.message || e.type) + ' @line ' + (e.lineno || '?'), false);
+    post({ fatal: String(e.message || e.type) });
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    boot('Promise 拒绝: ' + ((r && r.message) || String(r)), false);
+    post({ fatal: String((r && r.message) || r) });
+  });
+
+  boot('✓ 内联脚本已执行', true);
+  // 信标：<img> 打点，不走 fetch，用来区分「JS 没执行」和「fetch 被 CSP 拦」
+  (function () {
+    var img = new Image();
+    img.src = 'http://127.0.0.1:' + PORT + '/beacon?v=v3-html&secure=' + (window.isSecureContext ? 1 : 0)
+      + '&parent=' + (window.parent !== window ? 1 : 0)
+      + '&top=' + (window.top === window.parent ? 1 : 0);
+  })();
+  report.env = {
+    href: location.href.slice(0, 120),
+    origin: location.origin,
+    secureContext: window.isSecureContext,
+    hasParent: window.parent !== window,
+    topEqualsParent: window.top === window.parent,
+    ua: navigator.userAgent.slice(0, 120),
+    hasMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+  };
+  post({ stage: 'loaded', env: report.env });
+
+  // --- 手写最小 ui/initialize，直接观察宿主是否回应 ---
+  var set = {
+    secure: row('secure', '安全上下文'),
+    media: row('media', 'mediaDevices'),
+    hs: row('hs', 'ui/initialize'),
+    http: row('http', '本地 HTTP'),
+    ws: row('ws', '本地 WebSocket'),
+    worklet: row('worklet', 'AudioWorklet'),
+    mic: row('mic', '麦克风')
+  };
+  set.secure(report.env.secureContext ? '是' : '否', report.env.secureContext ? 'ok' : 'bad');
+  set.media(report.env.hasMedia ? '✓ 可用' : '✗ 不存在', report.env.hasMedia ? 'ok' : 'bad');
+
+  var seq = 0, pending = {};
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (!d || d.jsonrpc !== '2.0') return;
+    if (d.id && pending[d.id]) {
+      var p = pending[d.id];
+      delete pending[d.id];
+      d.error ? p.reject(new Error(d.error.message || 'error')) : p.resolve(d.result);
+    }
+  });
+  function rpc(method, params) {
+    var id = ++seq;
+    return new Promise(function (resolve, reject) {
+      pending[id] = { resolve: resolve, reject: reject };
+      parent.postMessage({ jsonrpc: '2.0', id: id, method: method, params: params }, '*');
+      setTimeout(function () {
+        if (pending[id]) { delete pending[id]; reject(new Error('timeout ' + method)); }
+      }, 12000);
+    });
+  }
+
+  boot('正在发送 ui/initialize…');
+  rpc('ui/initialize', {
+    protocolVersion: '2026-01-26',
+    appInfo: { name: 'voice-call-probe', version: '0.0.1' },
+    appCapabilities: { availableDisplayModes: ['inline', 'pip'] }
+  }).then(function (r) {
+    set.hs('✓ 握手成功', 'ok');
+    boot('✓ ui/initialize 成功', true);
+    parent.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/initialized', params: {} }, '*');
+    var caps = (r && r.hostCapabilities) || {};
+    report.handshake = { ok: true, hostInfo: r && r.hostInfo, hostCapabilities: caps };
+    post({ stage: 'handshake', handshake: report.handshake });
+  }).catch(function (e) {
+    set.hs('✗ ' + e.message, 'bad');
+    boot('✗ ui/initialize 失败: ' + e.message, false);
+    report.handshake = { ok: false, message: e.message };
+    post({ stage: 'handshake', handshake: report.handshake });
+  });
+
+  document.getElementById('run').onclick = async function () {
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = '检测中…';
+
+    // 本地 HTTP
+    try {
+      var res = await fetch('http://127.0.0.1:' + PORT + '/ping');
+      set.http('✓ ' + JSON.stringify(await res.json()), 'ok');
+      report.http = { ok: true };
+    } catch (e) { set.http('✗ ' + e.message, 'bad'); report.http = { ok: false, message: e.message }; }
+
+    // WebSocket
+    report.ws = await new Promise(function (resolve) {
+      var done = false;
+      function fin(v) { if (!done) { done = true; resolve(v); } }
+      try {
+        var ws = new WebSocket('ws://127.0.0.1:' + PORT + '/ws');
+        var t = setTimeout(function () { fin({ ok: false, message: 'timeout' }); }, 5000);
+        ws.onopen = function () { ws.send('ping'); };
+        ws.onmessage = function (m) { clearTimeout(t); fin({ ok: m.data === 'pong', echo: String(m.data) }); try { ws.close(); } catch (x) {} };
+        ws.onerror = function () { clearTimeout(t); fin({ ok: false, message: 'error' }); };
+      } catch (e) { fin({ ok: false, message: e.message }); }
+    });
+    set.ws(report.ws.ok ? '✓ 回显 ' + JSON.stringify(report.ws.echo) : '✗ ' + (report.ws.message || ''), report.ws.ok ? 'ok' : 'bad');
+
+    // AudioWorklet：三种加载方式
+    var code = 'class P extends AudioWorkletProcessor{process(){return true}}registerProcessor("probe-proc",P);';
+    report.worklet = {};
+    async function tryW(kind, url) {
+      try {
+        var ctx = new AudioContext();
+        await ctx.audioWorklet.addModule(url);
+        var node = new AudioWorkletNode(ctx, 'probe-proc');
+        report.worklet[kind] = { ok: !!node };
+        ctx.close();
+      } catch (e) { report.worklet[kind] = { ok: false, message: e.name + ': ' + e.message }; }
+    }
+    await tryW('ui', 'ui://voice-call-probe/assets/worklet.js');
+    if (!report.worklet.ui.ok) await tryW('blob', URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
+    if (!report.worklet.ui.ok && !(report.worklet.blob && report.worklet.blob.ok)) {
+      await tryW('data', 'data:text/javascript,' + encodeURIComponent(code));
+    }
+    var firstOk = Object.keys(report.worklet).filter(function (k) { return report.worklet[k].ok; })[0];
+    set.worklet(firstOk ? '✓ ' + firstOk : '✗ 全部失败', firstOk ? 'ok' : 'bad');
+
+    // 麦克风
+    try {
+      var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      var track = stream.getAudioTracks()[0];
+      report.mic = { ok: true, label: track && track.label };
+      set.mic('✓ ' + ((track && track.label) || '(无标签)'), 'ok');
+      stream.getTracks().forEach(function (t) { t.stop(); });
+    } catch (e) { report.mic = { ok: false, name: e.name, message: e.message }; set.mic('✗ ' + e.name, 'bad'); }
+
+    post({ stage: 'checks', results: report });
+    btn.textContent = '已上报 ✓';
+    boot('检测完成，已回传本地服务');
+  };
+})();
+</script>
+</body>
+</html>

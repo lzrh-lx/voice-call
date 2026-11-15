@@ -1,0 +1,9 @@
+{
+  "name": "dsh-voice-call",
+  "description": "Call your agent: floating ball, live voice, and the work happens in the chat window.",
+  "version": "0.0.1",
+  "entry": {
+    "name": "dsh-voice-call",
+    "inject": ["sessionController"]
+  }
+}

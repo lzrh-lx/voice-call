@@ -1,0 +1,17 @@
+# Node / 依赖
+node_modules/
+package-lock.json
+
+# 运行时数据（含 API Key，绝不入库）
+.voice-call/
+*.env
+.env*
+
+# 本地测试产物
+*.log
+*.pcm
+*.wav
+.DS_Store
+
+# 用户本地调试脚本
+/tmp/

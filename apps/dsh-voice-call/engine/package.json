@@ -1,0 +1,17 @@
+{
+  "name": "voice-call",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "跨宿主语音通话插件：与 agent 电话对话（GLM-Realtime 端到端语音）",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/index.mjs",
+    "install-skill": "node scripts/install.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

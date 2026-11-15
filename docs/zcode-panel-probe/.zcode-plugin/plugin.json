@@ -1,0 +1,40 @@
+{
+  "name": "voice-call-probe",
+  "version": "0.0.1",
+  "description": "voice-call 能力探针：验证面板内麦克风、WebSocket、AudioWorklet 与 PiP 浮窗是否可用。",
+  "description_i18n": {
+    "zh-CN": "语音通话插件的能力探针：验证 ZCode 面板里能否使用麦克风、连接本地 WebSocket、加载 AudioWorklet，以及 PiP 浮窗效果。"
+  },
+  "author": {
+    "name": "voice-call"
+  },
+  "mcpServers": {
+    "voice-call-probe": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${ZCODE_PLUGIN_ROOT}/mcp/server.mjs"
+      ],
+      "cwd": "${ZCODE_PROJECT_DIR}",
+      "env": {
+        "ZCODE_WORKSPACE_ROOT": "${ZCODE_PROJECT_DIR}"
+      },
+      "isolation": "workspace"
+    }
+  },
+  "ui": {
+    "surfaces": [
+      {
+        "id": "voice-call-probe",
+        "title": {
+          "zh-CN": "通话探针",
+          "en-US": "Call probe"
+        },
+        "icon": "phone",
+        "server": "voice-call-probe",
+        "resourceUri": "ui://voice-call-probe/v3/panel.html",
+        "availability": "session"
+      }
+    ]
+  }
+}

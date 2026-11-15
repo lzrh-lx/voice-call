@@ -1,0 +1,15 @@
+{
+  "name": "voice-call-probe",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "voice-call 能力探针：验证 ZCode 面板内麦克风/WS/AudioWorklet/PiP",
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^2.0.4",
+    "@modelcontextprotocol/sdk": "^1.20.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

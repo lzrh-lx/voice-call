@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>voice-call 悬浮球</title>
+<link rel="stylesheet" href="ball.css">
+</head>
+<body>
+
+<div id="ball" class="ball idle" title="voice-call">
+  <canvas id="wave" width="72" height="72"></canvas>
+  <div id="icon" class="icon">📞</div>
+  <div class="ring"></div>
+</div>
+
+<div id="picker" class="picker hidden"></div>
+
+<div id="panel" class="panel hidden">
+  <div class="row">
+    <span id="dot" class="dot"></span>
+    <span id="phaseText">待机</span>
+    <span id="timer" class="timer"></span>
+  </div>
+  <div id="liveCaption" class="caption"></div>
+  <div class="btns">
+    <button id="btnPip" class="btn hidden" title="浮到所有应用之上">置顶</button>
+    <button id="btnMute" class="btn">静音</button>
+    <button id="btnText" class="btn">字幕</button>
+    <button id="btnHangup" class="btn danger">挂断</button>
+  </div>
+  <div id="transcript" class="transcript hidden"></div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="ball.js"></script>
+</body>
+</html>
